@@ -58,9 +58,9 @@ let s:regex["function"] = '^\(\s*\)\([a-zA-Z ]*\)function\s\+\([^ (]\+\)\s*([^)]
 " \??[:space:]*[:typehint:]*[:space:]*$[:identifier]\([:space:]*=[:space:]*[:value:]\)?
 let s:regex["param"] = ' *\%(' . s:regex["typehint"] . '\)\?\s*\(&\)\?\$\([^ =)]\+\)\s*\%(=\s*\(.*\)\)\?$'
 
-" ^(?<indent>\s*)const\s+(?<name>\S+)\s*=
-" 1:indent, 2:name
-let s:regex["const"] = '^\(\s*\)const\s\+\(\S\+\)\s*='
+" ^(?<indent>\s*)const\s+(?<name>\S+)\s*=\s*(?<value>);
+" 1:indent, 2:name, 3:value
+let s:regex["const"] = '^\(\s*\)const\s\+\(\S\+\)\s*=\s*\([^;]\+\)'
 
 " [:space:]*(private|protected|public\)[:space:]*$[:identifier:]+\([:space:]*=[:space:]*[:value:]+\)*;
 let s:regex["attribute"] = '^\(\s*\)\(\(private\s*\|public\s*\|protected\s*\|static\s*\)\+\)\s*\$\([^ ;=]\+\)[ =]*\(.*\);\?$'
@@ -79,7 +79,7 @@ let s:regex["trait"] = '^\(\s*\)trait\s\+\(\S\+\)\s*{\?\s*$'
 
 let s:regex["types"] = {}
 
-let s:regex["types"]["array"]  = "^array *(.*"
+let s:regex["types"]["array"]  = '^\%(array([^)]*)\)\|\%(\[[^\]]*\]\)'
 let s:regex["types"]["float"]  = '^[0-9]*\.[0-9]\+'
 let s:regex["types"]["int"]    = '^[0-9]\+'
 let s:regex["types"]["string"] = "['\"].*"
@@ -270,6 +270,7 @@ func! pdv#ParseConstData(line)
 
 	let l:data["indent"] = l:matches[1]
 	let l:data["name"] = l:matches[2]
+    let l:data["type"] = s:GuessType(l:matches[3])
 
 	return l:data
 endfunc
