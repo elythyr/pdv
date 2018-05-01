@@ -74,11 +74,11 @@ let s:regex["interface"] = '^\(\s*\)interface\s\+\(\S\+\)\(\s\+extends\s\+\(\S\+
 let s:regex["trait"] = '^\(\s*\)trait\s\+\(\S\+\)\s*{\?\s*$'
 
 let s:regex.types = {
-	\ 'array':  '^\%(array([^)]*)\|\[[^\]]*\]\)',
-	\ 'float':  '^[0-9]*\.[0-9]\+',
-	\ 'int':    '^[0-9]\+',
-	\ 'string': "['\"].*",
-	\ 'bool':   '\(true\|false\)',
+	\ 'array':  '^\%(array([^)]*)\|\[[^\]]*\]\)$',
+	\ 'float':  '^[0-9]*\.[0-9]\+$',
+	\ 'int':    '^[0-9]\+$',
+	\ 'string': "^['\"].*",
+	\ 'bool':   '\(true\|false\)$',
 \}
 
 let s:regex["indent"] = '^\s*'
@@ -417,22 +417,13 @@ func! s:GetFinal(modifiers) " {{{
   return tolower(a:modifiers) =~ s:regex["final"]
 endfunc " }}}
 
-func! s:GuessType(typeString) " {{{
-  if a:typeString =~ s:regex["types"]["array"]
-    return "array"
-  endif
-  if a:typeString =~ s:regex["types"]["float"]
-    return "float"
-  endif
-  if a:typeString =~ s:regex["types"]["int"]
-    return "int"
-  endif
-  if a:typeString =~ s:regex["types"]["string"]
-    return "string"
-  endif
-  if a:typeString =~ s:regex["types"]["bool"]
-    return "bool"
-  endif
+func! s:GuessType(value) " {{{
+  " Will work as long as the order does not matter
+  for [l:type, l:pattern] in items(s:regex.types)
+    if a:value =~ l:pattern
+      return l:type
+    endif
+  endfor
 endfunc " }}}
 
 func! s:IsUltiSnipsAvailable() " {{{
