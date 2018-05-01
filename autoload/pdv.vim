@@ -74,11 +74,12 @@ let s:regex["interface"] = '^\(\s*\)interface\s\+\(\S\+\)\(\s\+extends\s\+\(\S\+
 let s:regex["trait"] = '^\(\s*\)trait\s\+\(\S\+\)\s*{\?\s*$'
 
 let s:regex.types = {
-	\ 'array':  '^\%(array([^)]*)\|\[[^\]]*\]\)$',
-	\ 'float':  '^[0-9]*\.[0-9]\+$',
-	\ 'int':    '^[0-9]\+$',
-	\ 'string': "^['\"].*",
-	\ 'bool':   '\(true\|false\)$',
+  \ 'array':  '^\%(array([^)]*)\|\[[^\]]*\]\)$',
+  \ 'float':  '^[0-9]*\.[0-9]\+$',
+  \ 'int':    '^[0-9]\+$',
+  \ 'string': "^['\"].*",
+  \ 'bool':   '\(true\|false\)$',
+  \ 'object': '^new\s\+\([^( ]\+\)',
 \}
 
 let s:regex["indent"] = '^\s*'
@@ -420,8 +421,10 @@ endfunc " }}}
 func! s:GuessType(value) " {{{
   " Will work as long as the order does not matter
   for [l:type, l:pattern] in items(s:regex.types)
-    if a:value =~ l:pattern
-      return l:type
+    let l:matches = matchlist(a:value, l:pattern)
+
+    if !empty(l:matches)
+      return !empty(l:matches[1]) ? l:matches[1] : l:type
     endif
   endfor
 endfunc " }}}
