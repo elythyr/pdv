@@ -54,9 +54,9 @@ let s:regex["function"] = '^\(\s*\)\([a-zA-Z ]*\)function\s\+\([^ (]\+\)\s*('
 " [:typehint:]*[:space:]*$[:identifier]\([:space:]*=[:space:]*[:value:]\)?
 let s:regex["param"] = ' *\([^ &]*\)\s*\(&\?\)\$\([^ =)]\+\)\s*\(=\s*\(.*\)\)\?$'
 
-" ^(?<indent>\s*)const\s+(?<name>\S+)\s*=
-" 1:indent, 2:name
-let s:regex["const"] = '^\(\s*\)const\s\+\(\S\+\)\s*='
+" ^(?<indent>\s*)(?<scope>\s+)?const\s+(?<name>\S+)\s*=\s*(?<value>)
+" 1:indent, 2:scope, 3:name, 4:value
+let s:regex["const"] = '^\(\s*\)\%(' . s:regex.scope . '\s\+\)\?const\s\+\(\S\+\)\s*=\s*\([^;]\{-}\)\s*;$'
 
 " [:space:]*(private|protected|public\)[:space:]*$[:identifier:]+\([:space:]*=[:space:]*[:value:]+\)*;
 let s:regex["attribute"] = '^\(\s*\)\(\(private\s*\|public\s*\|protected\s*\|static\s*\)\+\)\s*\$\([^ ;=]\+\)[ =]*\(.*\);\?$'
@@ -228,15 +228,15 @@ func! pdv#ParseTraitData(line) " {{{
 endfunc " }}}
 
 func! pdv#ParseConstData(line) " {{{
-" ^(?<indent>\s*)const\s+(?<name>\S+)\s*=
-" 1:indent, 2:name
+" 1:indent, 2:scope, 3:name, 4:value
   let l:text = getline(a:line)
 
   let l:data = {}
-  let l:matches = matchlist(l:text, s:regex["const"])
+  let l:matches = matchlist(l:text, s:regex['const'])
 
-  let l:data["indent"] = l:matches[1]
-  let l:data["name"] = l:matches[2]
+  let l:data['indent'] = l:matches[1]
+  let l:data['name']   = l:matches[3]
+  let l:data['type']   = s:GuessType(l:matches[4])
 
   return l:data
 endfunc " }}}

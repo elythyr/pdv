@@ -1,3 +1,3 @@
 /**
- * ${1:{{name}}}
+ * @var ${1:{{type}}{{^type}}mixed{{/type}}} ${2:Description}
  */
