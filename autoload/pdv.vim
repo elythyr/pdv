@@ -49,10 +49,12 @@ let s:regex["abstract"] = '\(abstract\)'
 " (final)
 let s:regex["final"] = '\(final\)'
 
-" [:space:]*(private|protected|public|static|abstract)*[:space:]+[:identifier:]+\([:params:]\)
-let s:regex["function"] = '^\(\s*\)\([a-zA-Z ]*\)function\s\+\([^ (]\+\)\s*('
-" [:typehint:]*[:space:]*$[:identifier]\([:space:]*=[:space:]*[:value:]\)?
-let s:regex["param"] = ' *\([^ &]*\)\s*\(&\?\)\$\([^ =)]\+\)\s*\(=\s*\(.*\)\)\?$'
+" (\?)?[:space:]*([:typehint:])
+let s:regex["typehint"] = '?\?\s*\w\+'
+" [:space:]*(private|protected|public|static|abstract)*[:space:]+[:identifier:]+\([:params:]\)\([:space:]*:[:space*](\?)?([:typehint:])\)?
+let s:regex["function"] = '^\(\s*\)\%(\(abstract\|public\|protected\|private\|static\)\s*\)\?function\s\+\([^ (]\+\)\s*([^)]*)\%(\s*:\s*\(' . s:regex["typehint"] . '\)\)\?'
+" \??[:space:]*[:typehint:]*[:space:]*$[:identifier]\([:space:]*=[:space:]*[:value:]\)?
+let s:regex["param"] = '\(' . s:regex["typehint"] . '\)\?\s*\(&\)\?\s*\$\([^ =)]\+\)\s*\%(=\s*\(.*\)\)\?$'
 
 " ^(?<indent>\s*)(?<scope>\s+)?const\s+(?<name>\S+)\s*=\s*(?<value>)
 " 1:indent, 2:scope, 3:name, 4:value
@@ -378,34 +380,31 @@ func! s:ParseExtendsImplements(data, text) " {{{
 endfunc " }}}
 
 func! s:ParseParameterData(text) " {{{
-  let l:data = {}
+  let [l:null, l:typehint, l:reference, l:name, l:value; l:rest] =
+    \ matchlist(a:text, s:regex['param'])
 
-  let l:matches = matchlist(a:text, s:regex["param"])
-
-  let l:data["reference"] = (l:matches[2] == "&")
-  let l:data["name"] = l:matches[3]
-  let l:data["default"] = l:matches[5]
-
-  if (!empty(l:matches[1]))
-    let l:data["type"] = l:matches[1]
-  elseif (!empty(l:data["default"]))
-    let l:data["type"] = s:GuessType(l:data["default"])
-  endif
-
-  return l:data
+  return {
+    \ 'reference': '&' == l:reference,
+    \ 'name':      l:name,
+    \ 'default':   l:value,
+    \ 'type':      !empty(l:typehint)
+      \ ? s:GetType(l:typehint)
+      \ : s:GuessType(l:value)
+  \}
 endfunc " }}}
 
 func! s:ParseBasicFunctionData(text) " {{{
-  let l:data = {}
+  let [l:null, l:indent, l:scope, l:name, l:return_type; l:rest] =
+    \ matchlist(a:text, s:regex['function'])
 
-  let l:matches = matchlist(a:text, s:regex["function"])
-
-  let l:data["indent"] = l:matches[1]
-  let l:data["scope"] = s:GetScope(l:matches[2])
-  let l:data["static"] = s:GetStatic(l:matches[2])
-  let l:data["name"] = l:matches[3]
-
-  return l:data
+  return {
+    \ 'indent':      l:indent,
+    \ 'abstract':    s:GetAbstract(l:scope),
+    \ 'scope':       s:GetScope(l:scope),
+    \ 'static':      s:GetStatic(l:scope),
+    \ 'name':        l:name,
+    \ 'return_type': s:GetType(l:return_type),
+  \}
 endfunc " }}}
 
 func! s:GetScope(modifiers) " {{{
@@ -422,6 +421,15 @@ endfunc " }}}
 
 func! s:GetFinal(modifiers) " {{{
   return tolower(a:modifiers) =~ s:regex["final"]
+endfunc " }}}
+
+func! s:GetType(type) " {{{
+  return substitute(
+    \ a:type,
+    \ '\(?\s*\)\?\(\w\+\)',
+    \ '\=submatch(2) . (empty(submatch(1)) ? "" : "|null")',
+    \ ''
+  \)
 endfunc " }}}
 
 func! s:GuessType(value) " {{{
