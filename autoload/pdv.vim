@@ -73,13 +73,13 @@ let s:regex["interface"] = '^\(\s*\)interface\s\+\(\S\+\)\(\s\+extends\s\+\(\S\+
 " 1:indent, 2:name
 let s:regex["trait"] = '^\(\s*\)trait\s\+\(\S\+\)\s*{\?\s*$'
 
-let s:regex["types"] = {}
-
-let s:regex["types"]["array"]  = "^array *(.*"
-let s:regex["types"]["float"]  = '^[0-9]*\.[0-9]\+'
-let s:regex["types"]["int"]    = '^[0-9]\+'
-let s:regex["types"]["string"] = "['\"].*"
-let s:regex["types"]["bool"] = "\(true\|false\)"
+let s:regex.types = {
+	\ 'array':  '^\%(array([^)]*)\|\[[^\]]*\]\)',
+	\ 'float':  '^[0-9]*\.[0-9]\+',
+	\ 'int':    '^[0-9]\+',
+	\ 'string': "['\"].*",
+	\ 'bool':   '\(true\|false\)',
+\}
 
 let s:regex["indent"] = '^\s*'
 
