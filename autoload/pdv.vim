@@ -162,15 +162,21 @@ func! pdv#DocumentWithoutSnip(...) " {{{
 endfunc " }}}
 
 func! pdv#DocumentLine(...) " {{{
-  let l:linenr = a:0 ? a:1 : line('.')
-  let l:documentation = s:PrepareDocumentation(l:linenr)
+  try
+    let l:linenr = a:0 ? a:1 : line('.')
+    let l:documentation = s:PrepareDocumentation(l:linenr)
 
-  if s:IsUltiSnipsAvailable()
-    put! =nr2char(10)
-    call UltiSnips#Anon(join(l:documentation, nr2char(10)))
-  else
-    call append(l:linenr - 1, l:documentation)
-  endif
+    if s:IsUltiSnipsAvailable()
+      put! =nr2char(10)
+      call UltiSnips#Anon(join(l:documentation, nr2char(10)))
+    else
+      call append(l:linenr - 1, l:documentation)
+    endif
+  catch
+    echohl ErrorMsg
+    echo v:exception
+    echohl NONE
+  endtry
 endfunc " }}}
 
 func! pdv#ParseClassData(line) " {{{
