@@ -2,7 +2,7 @@
 " ===========================
 "
 " Version: 2.0.0alpha1
-" 
+"
 " Copyright 2005-2011 by Tobias Schlitt <toby@php.net>
 "
 " Provided under the GPL (http://www.gnu.org/copyleft/gpl.html).
@@ -10,7 +10,7 @@
 " This script provides functions to generate phpDocumentor conform
 " documentation blocks for your PHP code. The script currently
 " documents:
-" 
+"
 " - Classes
 " - Methods/Functions
 " - Attributes
@@ -18,25 +18,23 @@
 " - Interfaces
 " - Traits
 "
-" All of those supporting PHP 5 syntax elements. 
+" All of those supporting PHP 5 syntax elements.
 "
-" Beside that it allows you to define default values for phpDocumentor tags 
-" like @version (I use $id$ here), @author, @license and so on. 
+" Beside that it allows you to define default values for phpDocumentor tags
+" like @version (I use $id$ here), @author, @license and so on.
 "
-" For function/method parameters and attributes, the script tries to guess the 
-" type as good as possible from PHP5 type hints or default values (array, bool, 
+" For function/method parameters and attributes, the script tries to guess the
+" type as good as possible from PHP5 type hints or default values (array, bool,
 " int, string...).
-"
-" You can use this script by mapping the function pdv#DocumentCurrentLine() to
-" any key combination. Hit this on the line where the element to document
-" resides and the doc block will be created directly above that line.
 
 let s:old_cpo = &cpo
 set cpo&vim
 
-"
-" Regular expressions 
-" 
+" Script variables {{{
+let s:enable_ultisnips  = 0
+let s:disable_ultisnips = 1
+
+" Regular expressions {{{
 
 let s:comment = ' *\*/ *'
 
@@ -105,268 +103,348 @@ let s:mapping = [
     \  "function": function("pdv#ParseTraitData"),
     \  "template": "trait"},
 \ ]
+" }}}
+" }}}
 
-func! pdv#DocumentCurrentLine()
-	let l:docline = line(".")
-	let l:linecontent = getline(l:docline)
-	call pdv#DocumentLine(l:docline)
-endfunc
+" I want to add is the possibility for the user to be able to choose
+" between using UltiSnips or not and to have the possibility to let the plugin
+" decides automaticaly.
+" But I want the updated version to continue to work for users with the
+" previous version.
+"
+" pdv#DocumentCurrentLine()
+"   Is deprecated and only there for backwards compatibility.
+"   Use pdv#DocumentWithoutSnip(...) instead.
+"   It's behavior is preserved: it will only document the current line
+"   without UltiSnips
+"
+" pdv#DocumentLine(linenr)
+"   Will be intended to document a line and choose between UltiSnips or
+"   VMustache automatically.
+"   By default, UltiSnips autodetection will be disabled so the users
+"   upgrading the plugin will not see any changes.
+"
+" pdv#DocumentWithSnip(...)
+"   Will enforce the use of UltiSnips and fallback on VMustache if UltiSnips
+"   is not installed.
+"   It will take an optional argument which is the line number to document.
+"   By default it will be the current line, to preserve the actual behavior.
+"
+" pdv#DocumentWithoutSnip(...)
+"   Will disable UltiSnips detection.
+"   The optional argument is the line number to document, default to the
+"   current line.
 
-func! pdv#DocumentLine(lineno)
-	let l:parseconfig = s:DetermineParseConfig(getline(a:lineno))
-	let l:data = s:ParseDocData(a:lineno, l:parseconfig)
-	let l:docblock = s:GenerateDocumentation(l:parseconfig, l:data)
+" Global functions {{{
+func! pdv#EnableUltiSnips() " {{{
+  let b:pdv_disable_ultisnips = s:enable_ultisnips
+endfunc " }}}
 
-	call append(a:lineno - 1, s:ApplyIndent(l:docblock, l:data["indent"]))
-	" TODO: Assumes phpDoc style comments (indent + 4).
-	call cursor(a:lineno + 1, len(l:data["indent"]) + 4)
-endfunc
+func! pdv#DisableUltiSnips() " {{{
+  let b:pdv_disable_ultisnips = s:disable_ultisnips
+endfunc " }}}
 
-func! pdv#DocumentWithSnip()
-	let l:docline = line(".")
+func! pdv#ToggleUltiSnips() " {{{
+  let b:pdv_disable_ultisnips = !b:pdv_disable_ultisnips
+endfunc " }}}
 
-	let l:parseconfig = s:DetermineParseConfig(getline(l:docline))
-	let l:data = s:ParseDocData(l:docline, l:parseconfig)
-	let l:docblock = s:GenerateDocumentation(l:parseconfig, l:data)
-    let l:snippet = join(s:ApplyIndent(l:docblock, l:data["indent"]), "\n")
+func! pdv#DocumentCurrentLine() " {{{
+  call pdv#DocumentWithoutSnip(line('.'))
+endfunc " }}}
 
-	let l:indent = l:data["indent"]
+func! pdv#DocumentWithSnip(...) " {{{
+  call call('s:DocumentWith', [s:enable_ultisnips] + a:000)
+endfunc " }}}
 
-	call append(l:docline - 1, [""])
-	call cursor(l:docline, 0)
+func! pdv#DocumentWithoutSnip(...) " {{{
+  call call('s:DocumentWith', [s:disable_ultisnips] + a:000)
+endfunc " }}}
 
-    call UltiSnips#Anon(l:snippet)
-endfunc
+func! pdv#DocumentLine(...) " {{{
+  let l:linenr = a:0 ? a:1 : line('.')
+  let l:documentation = s:PrepareDocumentation(l:linenr)
 
-func! s:DetermineParseConfig(line)
-	for l:parseconfig in s:mapping
-		if match(a:line, l:parseconfig["regex"]) > -1
-			return l:parseconfig
-		endif
-	endfor
-	throw "Could not detect parse config for '" . a:line . "'"
-endfunc
+  if s:IsUltiSnipsAvailable()
+    put! =nr2char(10)
+    call UltiSnips#Anon(join(l:documentation, nr2char(10)))
+  else
+    call append(l:linenr - 1, l:documentation)
+  endif
+endfunc " }}}
 
-func! s:ParseDocData(docline, config)
-	let l:Parsefunction = a:config["function"]
-	return l:Parsefunction(a:docline)
-endfunc
+func! pdv#ParseClassData(line) " {{{
+  let l:text = getline(a:line)
 
-func! s:GenerateDocumentation(config, data)
-	let l:template = s:GetTemplate(a:config["template"] . '.tpl')
-	return s:ProcessTemplate(l:template, a:data)
-endfunc
+  let l:data = {}
+  let l:matches = matchlist(l:text, s:regex["class"])
 
-func! s:GetTemplate(filename)
-	return g:pdv_template_dir . '/' . a:filename
-endfunc
+  let l:data["indent"] = matches[1]
+  let l:data["name"] = matches[4]
+  let l:data["abstract"] = s:GetAbstract(matches[2])
+  let l:data["final"] = s:GetFinal(matches[2])
 
-func! s:ProcessTemplate(file, data)
-	return vmustache#RenderFile(a:file, a:data)
-endfunc
+  if (!empty(l:matches[5]))
+    call s:ParseExtendsImplements(l:data, l:matches[5])
+  endif
+  " TODO: abstract? final?
 
-func! s:ApplyIndent(text, indent)
-	let l:lines = split(a:text, "\n")
-	return map(l:lines, '"' . a:indent . '" . v:val')
-endfunc
+  return l:data
+endfunc " }}}
 
-func! pdv#ParseClassData(line)
-	let l:text = getline(a:line)
-
-	let l:data = {}
-	let l:matches = matchlist(l:text, s:regex["class"])
-
-	let l:data["indent"] = matches[1]
-	let l:data["name"] = matches[4]
-	let l:data["abstract"] = s:GetAbstract(matches[2])
-	let l:data["final"] = s:GetFinal(matches[2])
-
-	if (!empty(l:matches[5]))
-		call s:ParseExtendsImplements(l:data, l:matches[5])
-	endif
-	" TODO: abstract? final?
-
-	return l:data
-endfunc
-
+func! pdv#ParseInterfaceData(line) " {{{
 " ^(?<indent>\s*)interface\s+(?<name>\S+)(\s+extends\s+(?<interface>\s+)(\s*,\s*(?<interface>\S+))*)?\s*{?\s*$
 " 1:indent, 2:name, 4,6,8,...:extended interfaces
-func! pdv#ParseInterfaceData(line)
-	let l:text = getline(a:line)
+  let l:text = getline(a:line)
 
-	let l:data = {}
-	let l:matches = matchlist(l:text, s:regex["interface"])
+  let l:data = {}
+  let l:matches = matchlist(l:text, s:regex["interface"])
 
-	let l:data["indent"] = matches[1]
-	let l:data["name"] = matches[2]
+  let l:data["indent"] = matches[1]
+  let l:data["name"] = matches[2]
 
-	let l:data["parents"] = []
+  let l:data["parents"] = []
 
-	let i = 2
-	while !empty(l:matches[i+2])
-		let i += 2
-		let l:data["parents"] += [{"name":matches[i]}]
-	endwhile
+  let i = 2
+  while !empty(l:matches[i+2])
+    let i += 2
+    let l:data["parents"] += [{"name":matches[i]}]
+  endwhile
 
-	return l:data
-endfunc
+  return l:data
+endfunc " }}}
 
+func! pdv#ParseTraitData(line) " {{{
 " ^(?<indent>\s*)trait\s+(?<name>\S+)\s*{?\s*$
 " 1:indent, 2:name
-func! pdv#ParseTraitData(line)
-	let l:text = getline(a:line)
+  let l:text = getline(a:line)
 
-	let l:data = {}
-	let l:matches = matchlist(l:text, s:regex["trait"])
+  let l:data = {}
+  let l:matches = matchlist(l:text, s:regex["trait"])
 
-	let l:data["indent"] = matches[1]
-	let l:data["name"] = matches[2]
+  let l:data["indent"] = matches[1]
+  let l:data["name"] = matches[2]
 
-	return l:data
-endfunc
+  return l:data
+endfunc " }}}
 
-func! s:ParseExtendsImplements(data, text)
-	let l:tokens = split(a:text, '\(\s*,\s*\|\s\+\)')
-
-	let l:extends = 0
-	for l:token in l:tokens
-		if (tolower(l:token) == "extends")
-			let l:extends = 1
-			continue
-		endif
-		if l:extends
-			let a:data["parent"] = [{"name": l:token}]
-			break
-		endif
-	endfor
-
-	let l:implements = 0
-	let l:interfaces = []
-	for l:token in l:tokens
-		if (tolower(l:token) == "implements")
-			let l:implements = 1
-			continue
-		endif
-		if (l:implements && tolower(l:token) == "extends")
-			break
-		endif
-		if (l:implements)
-			call add(l:interfaces, {"name": l:token})
-		endif
-	endfor
-	let a:data["interfaces"] = l:interfaces
-
-endfunc
-
+func! pdv#ParseConstData(line) " {{{
 " ^(?<indent>\s*)const\s+(?<name>\S+)\s*=
 " 1:indent, 2:name
-func! pdv#ParseConstData(line)
-	let l:text = getline(a:line)
+  let l:text = getline(a:line)
 
-	let l:data = {}
-	let l:matches = matchlist(l:text, s:regex["const"])
+  let l:data = {}
+  let l:matches = matchlist(l:text, s:regex["const"])
 
-	let l:data["indent"] = l:matches[1]
-	let l:data["name"] = l:matches[2]
+  let l:data["indent"] = l:matches[1]
+  let l:data["name"] = l:matches[2]
 
-	return l:data
-endfunc
+  return l:data
+endfunc " }}}
 
-func! pdv#ParseAttributeData(line)
-	let l:text = getline(a:line)
+func! pdv#ParseAttributeData(line) " {{{
+  let l:text = getline(a:line)
 
-	let l:data = {}
-	let l:matches = matchlist(l:text, s:regex["attribute"])
+  let l:data = {}
+  let l:matches = matchlist(l:text, s:regex["attribute"])
 
-	let l:data["indent"] = l:matches[1]
-	let l:data["scope"] = s:GetScope(l:matches[2])
-	let l:data["static"] = s:GetStatic(l:matches[2])
-	let l:data["name"] = l:matches[4]
-	" TODO: Cleanup ; and friends
-	let l:data["default"] = get(l:matches, 5, '')
-	let l:data["type"] = s:GuessType(l:data["default"])
+  let l:data["indent"] = l:matches[1]
+  let l:data["scope"] = s:GetScope(l:matches[2])
+  let l:data["static"] = s:GetStatic(l:matches[2])
+  let l:data["name"] = l:matches[4]
+  " TODO: Cleanup ; and friends
+  let l:data["default"] = get(l:matches, 5, '')
+  let l:data["type"] = s:GuessType(l:data["default"])
 
-	return l:data
-endfunc
+  return l:data
+endfunc " }}}
 
-func! pdv#ParseFunctionData(line)
-	let l:text = getline(a:line)
+func! pdv#ParseFunctionData(line) " {{{
+  let l:text = getline(a:line)
 
-	let l:data = s:ParseBasicFunctionData(l:text)
-	let l:data["parameters"] = []
+  let l:data = s:ParseBasicFunctionData(l:text)
+  let l:data["parameters"] = []
 
-	let l:parameters = parparse#ParseParameters(a:line)
+  let l:parameters = parparse#ParseParameters(a:line)
 
-	for l:param in l:parameters
-		call add(l:data["parameters"], s:ParseParameterData(l:param))
-	endfor
+  for l:param in l:parameters
+    call add(l:data["parameters"], s:ParseParameterData(l:param))
+  endfor
 
-	return l:data
-endfunc
+  return l:data
+endfunc " }}}
+" }}}
 
-func! s:ParseParameterData(text)
-	let l:data = {}
+" Script functions {{{
+func! s:DocumentWith(disable_ultisnips, ...) " {{{
+  let l:disable_ultisnips_save = b:pdv_disable_ultisnips
 
-	let l:matches = matchlist(a:text, s:regex["param"])
+  try
+    let b:pdv_disable_ultisnips = a:disable_ultisnips
 
-	let l:data["reference"] = (l:matches[2] == "&")
-	let l:data["name"] = l:matches[3]
-	let l:data["default"] = l:matches[5]
+    call pdv#DocumentLine(a:0 ? a:1 : line('.'))
+  finally
+    let b:pdv_disable_ultisnips = l:disable_ultisnips_save
+  endtry
+endfunc " }}}
 
-	if (!empty(l:matches[1]))
-		let l:data["type"] = l:matches[1]
-	elseif (!empty(l:data["default"]))
-		let l:data["type"] = s:GuessType(l:data["default"])
-	endif
+func! s:PrepareDocumentation(linenr) " {{{
+  let l:parseconfig   = s:DetermineParseConfig(getline(a:linenr))
+  let l:data          = s:ParseDocData(a:linenr, l:parseconfig)
+  let l:documentation = s:GenerateDocumentation(l:parseconfig, l:data)
 
-	return l:data
-endfunc
+  return s:ApplyIndent(l:documentation, l:data['indent'])
+endfunc " }}}
 
-func! s:ParseBasicFunctionData(text)
-	let l:data = {}
+func! s:DetermineParseConfig(line) " {{{
+  for l:parseconfig in s:mapping
+    if match(a:line, l:parseconfig["regex"]) > -1
+      return l:parseconfig
+    endif
+  endfor
+  throw "Could not detect parse config for '" . a:line . "'"
+endfunc " }}}
 
-	let l:matches = matchlist(a:text, s:regex["function"])
+func! s:ParseDocData(docline, config) " {{{
+  let l:Parsefunction = a:config["function"]
+  return l:Parsefunction(a:docline)
+endfunc " }}}
 
-	let l:data["indent"] = l:matches[1]
-	let l:data["scope"] = s:GetScope(l:matches[2])
-	let l:data["static"] = s:GetStatic(l:matches[2])
-	let l:data["name"] = l:matches[3]
+func! s:GenerateDocumentation(config, data) " {{{
+  let l:template = s:GetTemplate(a:config["template"] . '.tpl')
+  return s:ProcessTemplate(l:template, a:data)
+endfunc " }}}
 
-	return l:data
-endfunc
+func! s:GetTemplateDirectory() " {{{
+  if exists('g:pdv_template_dir') " For backward compatibility
+    return g:pdv_template_dir
+  endif
 
-func! s:GetScope( modifiers )
-	return matchstr(a:modifiers, s:regex["scope"])
-endfunc
+  let l:type = s:IsUltiSnipsAvailable() ? 'ultisnips' : 'vmustache'
 
-func! s:GetStatic( modifiers )
-	return tolower(a:modifiers) =~ s:regex["static"]
-endfunc
+  return b:pdv_template_dir[l:type]
+endfunc " }}}
 
-func! s:GetAbstract( modifiers )
-	return tolower(a:modifiers) =~ s:regex["abstract"]
-endfunc
+func! s:GetTemplate(filename) " {{{
+  return s:GetTemplateDirectory() . '/' . a:filename
+endfunc " }}}
 
-func! s:GetFinal( modifiers )
-	return tolower(a:modifiers) =~ s:regex["final"]
-endfunc
+func! s:ProcessTemplate(file, data) " {{{
+  return vmustache#RenderFile(a:file, a:data)
+endfunc " }}}
 
-func! s:GuessType( typeString )
-	if a:typeString =~ s:regex["types"]["array"]
-		return "array"
-	endif
-	if a:typeString =~ s:regex["types"]["float"]
-		return "float"
-	endif
-	if a:typeString =~ s:regex["types"]["int"]
-		return "int"
-	endif
-	if a:typeString =~ s:regex["types"]["string"]
-		return "string"
-	endif
-	if a:typeString =~ s:regex["types"]["bool"]
-		return "bool"
-	endif
-endfunc
+func! s:ApplyIndent(text, indent) " {{{
+  let l:lines = split(a:text, "\n")
+  return map(l:lines, '"' . a:indent . '" . v:val')
+endfunc " }}}
+
+func! s:ParseExtendsImplements(data, text) " {{{
+  let l:tokens = split(a:text, '\(\s*,\s*\|\s\+\)')
+
+  let l:extends = 0
+  for l:token in l:tokens
+    if (tolower(l:token) == "extends")
+      let l:extends = 1
+      continue
+    endif
+    if l:extends
+      let a:data["parent"] = [{"name": l:token}]
+      break
+    endif
+  endfor
+
+  let l:implements = 0
+  let l:interfaces = []
+  for l:token in l:tokens
+    if (tolower(l:token) == "implements")
+      let l:implements = 1
+      continue
+    endif
+    if (l:implements && tolower(l:token) == "extends")
+      break
+    endif
+    if (l:implements)
+      call add(l:interfaces, {"name": l:token})
+    endif
+  endfor
+  let a:data["interfaces"] = l:interfaces
+
+endfunc " }}}
+
+func! s:ParseParameterData(text) " {{{
+  let l:data = {}
+
+  let l:matches = matchlist(a:text, s:regex["param"])
+
+  let l:data["reference"] = (l:matches[2] == "&")
+  let l:data["name"] = l:matches[3]
+  let l:data["default"] = l:matches[5]
+
+  if (!empty(l:matches[1]))
+    let l:data["type"] = l:matches[1]
+  elseif (!empty(l:data["default"]))
+    let l:data["type"] = s:GuessType(l:data["default"])
+  endif
+
+  return l:data
+endfunc " }}}
+
+func! s:ParseBasicFunctionData(text) " {{{
+  let l:data = {}
+
+  let l:matches = matchlist(a:text, s:regex["function"])
+
+  let l:data["indent"] = l:matches[1]
+  let l:data["scope"] = s:GetScope(l:matches[2])
+  let l:data["static"] = s:GetStatic(l:matches[2])
+  let l:data["name"] = l:matches[3]
+
+  return l:data
+endfunc " }}}
+
+func! s:GetScope(modifiers) " {{{
+  return matchstr(a:modifiers, s:regex["scope"])
+endfunc " }}}
+
+func! s:GetStatic(modifiers) " {{{
+  return tolower(a:modifiers) =~ s:regex["static"]
+endfunc " }}}
+
+func! s:GetAbstract(modifiers) " {{{
+  return tolower(a:modifiers) =~ s:regex["abstract"]
+endfunc " }}}
+
+func! s:GetFinal(modifiers) " {{{
+  return tolower(a:modifiers) =~ s:regex["final"]
+endfunc " }}}
+
+func! s:GuessType(typeString) " {{{
+  if a:typeString =~ s:regex["types"]["array"]
+    return "array"
+  endif
+  if a:typeString =~ s:regex["types"]["float"]
+    return "float"
+  endif
+  if a:typeString =~ s:regex["types"]["int"]
+    return "int"
+  endif
+  if a:typeString =~ s:regex["types"]["string"]
+    return "string"
+  endif
+  if a:typeString =~ s:regex["types"]["bool"]
+    return "bool"
+  endif
+endfunc " }}}
+
+func! s:IsUltiSnipsAvailable() " {{{
+  if get(b:, 'pdv_disable_ultisnips', 0)
+    return
+  endif
+
+  return 2 == exists(':UltiSnipsEdit')
+endfunc " }}}
+" }}}
 
 let &cpo = s:old_cpo
+unlet s:old_cpo
+
+" vim:ts=2:sw=2:et:fdm=marker
