@@ -40,7 +40,7 @@ command! -bar -buffer -nargs=0 PdvToggleUltiSnips  call pdv#ToggleUltiSnips()
 " }}}
 
 " Mappings {{{
-nnoremap <silent> <unique> <Plug>PdvDocumentCurrentLine :PdvDocumentLine<CR>
+nnoremap <silent> <Plug>PdvDocumentCurrentLine :PdvDocumentLine<CR>
 
 if get(b:, 'no_pdv_mappings', 1)
   if !hasmapto('<Plug>PdvDocumentCurrentLine')
