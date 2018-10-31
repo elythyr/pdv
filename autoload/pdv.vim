@@ -52,7 +52,14 @@ let s:regex["final"] = '\(final\)'
 " (\?)?[:space:]*([:typehint:])
 let s:regex["typehint"] = '?\?\s*\w\+'
 " [:space:]*(private|protected|public|static|abstract)*[:space:]+[:identifier:]+\([:params:]\)\([:space:]*:[:space*](\?)?([:typehint:])\)?
-let s:regex["function"] = '^\(\s*\)\%(\(abstract\|public\|protected\|private\|static\)\s*\)\?function\s\+\([^ (]\+\)\s*([^)]*)\%(\s*:\s*\(' . s:regex["typehint"] . '\)\)\?'
+let s:regex["function"] = '^\(\s*\)' .
+  \ '\%(' . s:regex["abstract"] . '\s\+\)\?' .
+  \ '\%(' . s:regex["scope"] . '\s\+\)\?' .
+  \ '\%(' . s:regex["static"] . '\s\+\)\?' .
+  \ 'function\s\+' .
+  \ '\([^ (]\+\)\s*' .
+  \ '([^)]*)' .
+  \ '\%(\s*:\s*\(' . s:regex["typehint"] . '\)\)\?'
 " \??[:space:]*[:typehint:]*[:space:]*$[:identifier]\([:space:]*=[:space:]*[:value:]\)?
 let s:regex["param"] = '\(' . s:regex["typehint"] . '\)\?\s*\(&\)\?\s*\$\([^ =)]\+\)\s*\%(=\s*\(.*\)\)\?$'
 
@@ -394,14 +401,14 @@ func! s:ParseParameterData(text) " {{{
 endfunc " }}}
 
 func! s:ParseBasicFunctionData(text) " {{{
-  let [l:null, l:indent, l:scope, l:name, l:return_type; l:rest] =
+  let [l:null, l:indent, l:abstract, l:scope, l:static, l:name, l:return_type; l:rest] =
     \ matchlist(a:text, s:regex['function'])
 
   return {
     \ 'indent':      l:indent,
-    \ 'abstract':    s:GetAbstract(l:scope),
-    \ 'scope':       s:GetScope(l:scope),
-    \ 'static':      s:GetStatic(l:scope),
+    \ 'abstract':    !empty(l:abstract),
+    \ 'scope':       l:scope,
+    \ 'static':      !empty(l:static),
     \ 'name':        l:name,
     \ 'return_type': s:GetType(l:return_type),
   \}
@@ -409,14 +416,6 @@ endfunc " }}}
 
 func! s:GetScope(modifiers) " {{{
   return matchstr(a:modifiers, s:regex["scope"])
-endfunc " }}}
-
-func! s:GetStatic(modifiers) " {{{
-  return tolower(a:modifiers) =~ s:regex["static"]
-endfunc " }}}
-
-func! s:GetAbstract(modifiers) " {{{
-  return tolower(a:modifiers) =~ s:regex["abstract"]
 endfunc " }}}
 
 func! s:GetFinal(modifiers) " {{{
