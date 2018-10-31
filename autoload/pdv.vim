@@ -418,6 +418,14 @@ func! s:GetScope(modifiers) " {{{
   return matchstr(a:modifiers, s:regex["scope"])
 endfunc " }}}
 
+func! s:GetStatic(modifiers) " {{{
+  return tolower(a:modifiers) =~ s:regex["static"]
+endfunc " }}}
+
+func! s:GetAbstract(modifiers) " {{{
+  return tolower(a:modifiers) =~ s:regex["abstract"]
+endfunc " }}}
+
 func! s:GetFinal(modifiers) " {{{
   return tolower(a:modifiers) =~ s:regex["final"]
 endfunc " }}}
