@@ -177,6 +177,8 @@ func! pdv#DocumentLine(...) " {{{
 
     if s:IsUltiSnipsAvailable()
       put! =nr2char(10)
+      " Needed to avoid a bug with Ultisnips: https://github.com/SirVer/ultisnips/issues/1028
+      py3 UltiSnips_Manager._leaving_buffer()
       call UltiSnips#Anon(join(l:documentation, nr2char(10)))
     else
       call append(l:linenr - 1, l:documentation)
